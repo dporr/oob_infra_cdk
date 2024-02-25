@@ -2,7 +2,8 @@ from constructs import Construct
 from aws_cdk import (
     Stack,
     aws_iam as iam,
-    aws_ec2 as ec2
+    aws_ec2 as ec2,
+    CfnOutput
 )
 
 
@@ -37,8 +38,13 @@ class OobInfraCdkStack(Stack):
         self.ssm_user_data = ec2.UserData.for_linux()
         #TODO: Is there a best way of getting SSM agent w/o hardcoding it here?
         SSM_AGENT_RPM = "https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm"
+        OOB_DOMAIN = "oob.theartofhacking.club"
+        INTERACTSSH_LATEST = "https://github.com/projectdiscovery/interactsh/releases/download/v1.1.9/interactsh-server_1.1.9_linux_amd64.zip"
         self.ssm_user_data.add_commands(f"sudo yum install -y ${SSM_AGENT_RPM}", "sudo systemctl status amazon-ssm-agent")
-
+        #Install and instantiate interactsh-server
+        self.ssm_user_data.add_commands(f"curl -L -o interactsh.zip {INTERACTSSH_LATEST}")
+        self.ssm_user_data.add_commands("unzip interactsh.zip", "chmod +x interactsh-server", "mv interactsh-server /usr/bin/interactsh-server")
+        self.ssm_user_data.add_commands(f"interactsh-server -domain {OOB_DOMAIN}")
         self.ec2_instance = ec2.Instance(
             self,
             "ec2-instance",
@@ -52,6 +58,12 @@ class OobInfraCdkStack(Stack):
             instance_name = "ec2-instance",
             user_data = self.ssm_user_data
         )
+        instance_id = CfnOutput(
+            self,
+            "oob-instance-id",
+            value = self.ec2_instance.instance_id
+        )
+        print(f"---->\n\n{instance_id}")
         #Add SSM permissions to initiate sessions from EC2 console and CLI
         #as described here: https://docs.aws.amazon.com/systems-manager/latest/userguide/getting-started-restrict-access-quickstart.html
         self.instance_role.add_to_policy(
