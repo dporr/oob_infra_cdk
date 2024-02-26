@@ -19,7 +19,10 @@ class OobInfraCdkStack(Stack):
                                 #    subnet_configuration= ec2.SubnetConfiguration(
                                 #     cidr_mask= 24,
                                 #     name = "igw",
-                                #     subnet_type= ec2.SubnetType.PUBLIC  
+                                    subnet_configuration = [ec2.SubnetConfiguration( 
+                                        name = "vpc-public-subnet",
+                                        subnet_type = ec2.SubnetType.PUBLIC )
+                                        ]
                                 #    )                          
         )
         self.instance_role = iam.Role(
@@ -56,14 +59,20 @@ class OobInfraCdkStack(Stack):
             machine_image =  ec2.MachineImage.latest_amazon_linux2(),
             role = self.instance_role,
             instance_name = "ec2-instance",
-            user_data = self.ssm_user_data
+            user_data = self.ssm_user_data,
+            associate_public_ip_address = True,
+            require_imdsv2 = True
         )
-        instance_id = CfnOutput(
+        CfnOutput(
             self,
             "oob-instance-id",
             value = self.ec2_instance.instance_id
         )
-        print(f"---->\n\n{instance_id}")
+        CfnOutput(
+            self,
+            "oob-instance-ip:dns",
+            value = f"{self.ec2_instance.instance_public_ip}:{self.ec2_instance.instance_public_dns_name}",
+            export_name="ec2-public-ip")
         #Add SSM permissions to initiate sessions from EC2 console and CLI
         #as described here: https://docs.aws.amazon.com/systems-manager/latest/userguide/getting-started-restrict-access-quickstart.html
         self.instance_role.add_to_policy(
@@ -87,3 +96,14 @@ class OobInfraCdkStack(Stack):
                 resources = ['*']
             )
         )
+
+        # Add SG rules for the listeners
+        sg = ec2.SecurityGroup(self, "sg-interactsh-listeners",
+                               vpc = self.public_vpc )
+        sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
+                            connection = ec2.Port.tcp(80),
+                            description="Allow HTTP access from anywhere")
+        sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
+                            connection = ec2.Port.tcp(443),
+                            description="Allow HTTPS access from anywhere")
+        self.ec2_instance.add_security_group(sg)
