@@ -14,7 +14,7 @@ class OobInfraCdkStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
         self.public_vpc =  ec2.Vpc(self,
                                    "public_vpc",
-                                   restrict_default_security_group= True,
+                                   restrict_default_security_group= False,
                                 #    ip_addresses= ec2.IpAddresses("10.0.0.0/16"),
                                 #    subnet_configuration= ec2.SubnetConfiguration(
                                 #     cidr_mask= 24,
@@ -99,11 +99,21 @@ class OobInfraCdkStack(Stack):
 
         # Add SG rules for the listeners
         sg = ec2.SecurityGroup(self, "sg-interactsh-listeners",
-                               vpc = self.public_vpc )
+                               vpc = self.public_vpc,
+                               allow_all_outbound = True,
+                               allow_all_ipv6_outbound = True
+                               )
         sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
                             connection = ec2.Port.tcp(80),
                             description="Allow HTTP access from anywhere")
         sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
                             connection = ec2.Port.tcp(443),
                             description="Allow HTTPS access from anywhere")
+        sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
+                            connection = ec2.Port.udp(53),
+                            description="Allow DNS(udp) access from anywhere")
+        sg.add_ingress_rule(peer = ec2.Peer.any_ipv4(), 
+                            connection = ec2.Port.tcp(53),
+                            description="Allow DNS(tcp) access from anywhere")
+        
         self.ec2_instance.add_security_group(sg)
